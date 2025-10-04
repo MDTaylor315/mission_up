@@ -1,27 +1,47 @@
-// lib/views/auth/login_screen.dart
+// lib/views/auth/register_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:mission_up/app_theme.dart';
+import 'package:mission_up/controllers/register_controller.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
+  RegisterController _controller = RegisterController();
   final _formKey = GlobalKey<FormState>();
-  final _userCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  bool _obscure = true;
 
-  static const _orange = Color(0xFFFFA754); // flecha y link
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _pass2Ctrl = TextEditingController();
+
+  final _nameFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _passFocus = FocusNode();
+  final _pass2Focus = FocusNode();
+
+  bool _obscure1 = true;
+  bool _obscure2 = true;
+
+  static const _orange = Color(0xFFFFA754); // flecha
+  static const _registerBtn = Color(0xFFF0B657); // botón Registrarme
 
   @override
   void dispose() {
-    _userCtrl.dispose();
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
     _passCtrl.dispose();
+    _pass2Ctrl.dispose();
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _passFocus.dispose();
+    _pass2Focus.dispose();
+
     super.dispose();
   }
 
@@ -47,23 +67,17 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _submit() {
+  Future _submit() async {
     if (_formKey.currentState!.validate()) {
-      FocusScope.of(context).unfocus();
-      // TODO: lógica real de login
-      Navigator.of(context).pushNamed("/loading");
-      // Simular un retraso de 2 segundos
-      Future.delayed(const Duration(seconds: 2), () {
-        // Aquí podrías navegar a la pantalla principal o donde sea necesario
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/main', // <- nueva ruta del shell
-          (route) => false,
-          arguments: {
-            'isAdmin': true, // o false
-            'tab': 0, // opcional: 0=Inicio, 1=Centro, 2=Perfil
-          },
-        );
-      });
+      final currentFocus = FocusManager.instance.primaryFocus;
+
+      // Oculta el teclado de forma inmediata.
+      currentFocus?.unfocus();
+      final success = await _controller.register(context,
+          nombre: _nameCtrl.text,
+          correo: _emailCtrl.text.trimRight(),
+          contrasena: _passCtrl.text.trimRight(),
+          proveedor: "credenciales");
     }
   }
 
@@ -71,19 +85,14 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // explícito (por si lo cambiaste en otro lado)
       resizeToAvoidBottomInset: true,
-
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => FocusScope.of(context).unfocus(),
-
-          // ⬇️ Clave: LayoutBuilder + SingleChildScrollView + ConstrainedBox
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final bottomInset =
-                  MediaQuery.of(context).viewInsets.bottom; // alto del teclado
+              final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
               return SingleChildScrollView(
                 keyboardDismissBehavior:
@@ -91,14 +100,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 16),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  // IntrinsicHeight permite que los Spacer funcionen con scroll
                   child: IntrinsicHeight(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Back (sin márgenes extra si no los quieres)
+                        // Back
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16.0),
+                          padding: const EdgeInsets.only(top: 16.0),
                           child: IconButton(
                             style: IconButton.styleFrom(
                               padding: EdgeInsets.zero,
@@ -106,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             icon: const Icon(Icons.arrow_back_rounded,
-                                color: Color(0xFFFFA754)),
+                                color: _orange),
                             onPressed: () => Navigator.maybePop(context),
                           ),
                         ),
@@ -114,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         // Título
                         Center(
                           child: Text(
-                            'Iniciar Sesión',
+                            'Registrarme',
                             style: Theme.of(context)
                                 .textTheme
                                 .headlineMedium
@@ -126,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
 
                         // Logo
                         Center(
@@ -138,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
 
                         // Formulario
                         Form(
@@ -146,7 +154,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Column(
                             children: [
                               TextFormField(
-                                controller: _userCtrl,
+                                controller: _nameCtrl,
+                                focusNode: _nameFocus,
+                                textInputAction: TextInputAction.next,
+                                keyboardType: TextInputType.name,
+                                textCapitalization: TextCapitalization.words,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600),
+                                decoration: _decor('Nombres y Apellidos'),
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                        ? 'Ingresa tu nombre'
+                                        : null,
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _emailCtrl,
+                                focusNode: _emailFocus,
                                 textInputAction: TextInputAction.next,
                                 keyboardType: TextInputType.emailAddress,
                                 style: const TextStyle(
@@ -161,8 +186,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 14),
                               TextFormField(
                                 controller: _passCtrl,
-                                textInputAction: TextInputAction.done,
-                                obscureText: _obscure,
+                                focusNode: _passFocus,
+                                textInputAction: TextInputAction.next,
+                                obscureText: _obscure1,
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600),
@@ -170,81 +196,76 @@ class _LoginScreenState extends State<LoginScreen> {
                                   'Contraseña',
                                   suffix: IconButton(
                                     onPressed: () =>
-                                        setState(() => _obscure = !_obscure),
+                                        setState(() => _obscure1 = !_obscure1),
                                     icon: Icon(
-                                      _obscure
+                                      _obscure1
                                           ? Icons.visibility
                                           : Icons.visibility_off,
                                       color: Colors.white.withOpacity(.9),
                                     ),
                                   ),
                                 ),
-                                onFieldSubmitted: (_) => _submit(),
-                                validator: (v) => (v == null || v.isEmpty)
-                                    ? 'Ingresa tu contraseña'
+                                validator: (v) => (v == null || v.length < 6)
+                                    ? 'Mínimo 6 caracteres'
                                     : null,
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _pass2Ctrl,
+                                focusNode: _pass2Focus,
+                                textInputAction: TextInputAction.done,
+                                obscureText: _obscure2,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600),
+                                decoration: _decor(
+                                  'Repetir Contraseña',
+                                  suffix: IconButton(
+                                    onPressed: () =>
+                                        setState(() => _obscure2 = !_obscure2),
+                                    icon: Icon(
+                                      _obscure2
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: Colors.white.withOpacity(.9),
+                                    ),
+                                  ),
+                                ),
+                                validator: (v) => (v != _passCtrl.text)
+                                    ? 'Las contraseñas no coinciden'
+                                    : null,
+                                onFieldSubmitted: (_) => _submit(),
                               ),
                             ],
                           ),
                         ),
 
-                        // Olvidé contraseña
-                        Align(
-                          alignment: Alignment.topRight,
-                          child: TextButton(
-                            onPressed: () {},
-                            style: TextButton.styleFrom(
-                              foregroundColor: _orange,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
-                            ),
-                            child: const Text('Olvide Contraseña',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
-                        ),
+                        const SizedBox(height: 24),
 
-                        SizedBox(height: 10),
-                        // Botón principal
+                        // Botón Registrarme (naranja)
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
                             style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.primaryColor,
-                              foregroundColor:
-                                  const Color.fromARGB(255, 199, 223, 206),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                            ),
-                            onPressed: _submit,
-                            child: const Text('Iniciar Sesión',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        // Botón registrarme (naranja claro)
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFF0B657),
+                              backgroundColor: _registerBtn,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
-                            onPressed: () {
-                              Navigator.of(context).pushNamed(
-                                "/register",
-                              );
+                            onPressed: () async {
+                              await _submit();
                             },
-                            child: const Text('Registrarme',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
+                            child: const Text(
+                              'Registrarme',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
                           ),
                         ),
 
-                        SizedBox(height: 30),
+                        const SizedBox(height: 24),
+
                         // Separador "o"
                         Row(
                           children: [
@@ -255,10 +276,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('o',
-                                  style: TextStyle(
-                                      color: Colors.white.withOpacity(.85),
-                                      fontWeight: FontWeight.w700)),
+                              child: Text(
+                                'o',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(.85),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                             Expanded(
                                 child: Divider(
@@ -267,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
 
-                        SizedBox(height: 30),
+                        const SizedBox(height: 24),
 
                         // Social buttons
                         Row(

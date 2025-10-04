@@ -1,7 +1,11 @@
 // lib/views/invite_register_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mission_up/controllers/login_controller.dart';
+import 'package:provider/provider.dart';
+import 'package:mission_up/providers/auth_provider.dart';
 import 'package:mission_up/app_theme.dart';
+import 'package:mission_up/controllers/student_controller.dart';
 
 class InviteRegisterScreen extends StatefulWidget {
   const InviteRegisterScreen({super.key});
@@ -16,6 +20,8 @@ class _InviteRegisterScreenState extends State<InviteRegisterScreen> {
   final _codeCtrl = TextEditingController();
   final _nameFocus = FocusNode();
   final _codeFocus = FocusNode();
+
+  final _controller = StudentController();
 
   @override
   void dispose() {
@@ -47,20 +53,25 @@ class _InviteRegisterScreenState extends State<InviteRegisterScreen> {
     );
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      FocusScope.of(context).unfocus();
-      // Aquí haces tu lógica real (API, provider, etc.)
-      Navigator.of(context).pushNamed("/loading");
-      // Simular un retraso de 2 segundos
-      Future.delayed(const Duration(seconds: 2), () {
-        // Aquí podrías navegar a la pantalla principal o donde sea necesario
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          "/main",
-          (route) => false,
-        );
-      });
-    }
+  Future<void> _submit() async {
+    // 1. Valida el formulario
+    if (!_formKey.currentState!.validate()) return;
+
+    // 2. Oculta el teclado
+    FocusScope.of(context).unfocus();
+
+    // 3. ¡Eso es todo! Simplemente delega la acción al controller.
+    //    El controller se encargará de mostrar el diálogo de carga,
+    //    llamar a la API y mostrar el error si es necesario.
+    await _controller.loginOrRegisterStudent(
+      context,
+      username: _nameCtrl.text.trim(),
+      familyCode: _codeCtrl.text.trim(),
+    );
+
+    // No necesitas hacer nada más aquí. Si el login es exitoso,
+    // el AuthWrapper detectará el cambio de estado y navegará
+    // automáticamente a la pantalla principal.
   }
 
   @override
@@ -146,11 +157,9 @@ class _InviteRegisterScreenState extends State<InviteRegisterScreen> {
                         controller: _codeCtrl,
                         focusNode: _codeFocus,
                         textInputAction: TextInputAction.done,
-                        textCapitalization: TextCapitalization.characters,
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(
                               RegExp(r'[A-Za-z0-9\-]')),
-                          UpperCaseTextFormatter(),
                         ],
                         style: const TextStyle(
                           color: Colors.white,

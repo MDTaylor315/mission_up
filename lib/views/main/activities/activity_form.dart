@@ -2,33 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mission_up/app_theme.dart';
+import 'package:mission_up/controllers/activity_form_controller.dart';
+import 'package:mission_up/models/actividad.dart';
+import 'package:mission_up/providers/actividad_provider.dart';
+import 'package:provider/provider.dart';
 
 class ActivityFormScreen extends StatefulWidget {
   /// Si quieres mostrar solo "Editar Actividad", puedes pasar true y
   /// cambiar el título abajo. Por ahora el mock muestra ambos.
   final bool isEdit;
-  const ActivityFormScreen({super.key, this.isEdit = false});
+  final Actividad? actividad; // ✅ AÑADE ESTO
+
+  const ActivityFormScreen({super.key, this.isEdit = false, this.actividad});
 
   @override
   State<ActivityFormScreen> createState() => _ActivityFormScreenState();
 }
 
 class _ActivityFormScreenState extends State<ActivityFormScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _controller = ActivityFormController();
 
+  // Junto a tus otras variables de estado y controladores:
+  final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _pointsCtrl = TextEditingController();
+  final _detailCtrl = TextEditingController();
 
-  String? _type; // 'tarea' | 'premio' | 'castigo'
+  int? _selectedTypeId;
 
-  final Map<String, String> _typeDescriptions = const {
-    'tarea':
-        'Descripción Tipo de Actividad\nTarea: Se otorgarán puntos cuando se cumpla.',
-    'premio':
-        'Descripción Tipo de Actividad\nPremio: Se canjean puntos para obtener recompensas.',
-    'castigo':
-        'Descripción Tipo de Actividad\nCastigo: Se restarán puntos, etc...',
-  };
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Si estamos en modo edición, rellenamos los campos
+    if (widget.isEdit && widget.actividad != null) {
+      final act = widget.actividad!;
+      _titleCtrl.text = act.titulo;
+      _detailCtrl.text = act.detalle ?? '';
+      _pointsCtrl.text = act.puntaje.toString();
+      _selectedTypeId = act.idTipoActividad;
+    }
+  }
 
   @override
   void dispose() {
@@ -57,19 +70,64 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
     );
   }
 
-  void _save() {
-    if (_formKey.currentState!.validate()) {
-      FocusScope.of(context).unfocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Actividad guardada')),
+// En _ActivityFormScreenState
+
+  // En _ActivityFormScreenState
+
+  Future<void> _save() async {
+    // 1. Validar el formulario (se mantiene igual)
+    if (!_formKey.currentState!.validate()) return;
+
+    FocusScope.of(context).unfocus();
+
+    // 2. Variable para guardar el resultado de la operación
+    bool success;
+
+    // 3. Decidir si ACTUALIZAR o CREAR usando widget.isEdit
+    if (widget.isEdit) {
+      // --- Lógica de Actualización ---
+      success = await _controller.updateActivity(
+        context: context,
+        activityId:
+            widget.actividad!.id.toInt(), // El ID de la actividad a editar
+        titulo: _titleCtrl.text,
+        detalle: _detailCtrl.text.isNotEmpty ? _detailCtrl.text : null,
+        puntaje: int.parse(_pointsCtrl.text),
+        idTipoActividad: _selectedTypeId!,
       );
-      // TODO: persistir (API/DB)
+    } else {
+      // --- Lógica de Creación (la que ya tenías) ---
+      success = await _controller.saveActivity(
+        context: context,
+        titulo: _titleCtrl.text,
+        detalle: _detailCtrl.text.isNotEmpty ? _detailCtrl.text : null,
+        puntaje: int.parse(_pointsCtrl.text),
+        idTipoActividad: _selectedTypeId!,
+      );
+    }
+
+    // 4. Manejar el resultado (se mantiene igual, pero con mensaje dinámico)
+    if (mounted && success) {
+      final message = widget.isEdit
+          ? 'Cambios guardados con éxito'
+          : 'Actividad creada con éxito';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      Navigator.of(context).pop();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final actividadesProvider = context.watch<ActividadesProvider>();
+    final screenTitle = widget.isEdit ? 'Editar Actividad' : 'Crear Actividad';
+    final buttonText = widget.isEdit ? 'Guardar Cambios' : 'Crear Actividad';
+    final tipoSeleccionado = _selectedTypeId == null
+        ? null
+        : actividadesProvider.tipos.firstWhere((t) => t.id == _selectedTypeId);
 
     return Scaffold(
       body: SafeArea(
@@ -104,7 +162,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
 
                       // Título
                       Text(
-                        'Crear Actividad / Editar Actividad',
+                        screenTitle,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -118,8 +176,8 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                         child: Column(
                           children: [
                             // Tipo Actividad (Dropdown) - SOLUCIÓN AQUÍ
-                            DropdownButtonFormField<String>(
-                              value: _type,
+                            DropdownButtonFormField<int>(
+                              value: _selectedTypeId,
                               isExpanded: true,
                               hint: Text(
                                 'Tipo de Actividad', // Corregido: era "Actividada"
@@ -128,35 +186,33 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'tarea', child: Text('Tarea')),
-                                DropdownMenuItem(
-                                    value: 'premio', child: Text('Premio')),
-                                DropdownMenuItem(
-                                    value: 'castigo', child: Text('Castigo')),
-                              ],
-                              selectedItemBuilder: (_) => const [
-                                Align(
+                              items: actividadesProvider.tipos.map((tipo) {
+                                return DropdownMenuItem(
+                                  value: tipo.id,
+                                  child: Text(tipo.descripcion),
+                                );
+                              }).toList(),
+                              selectedItemBuilder: (BuildContext context) {
+                                // Usamos la misma lista de tipos del provider
+                                return actividadesProvider.tipos
+                                    .map<Widget>((tipo) {
+                                  // Para cada tipo en la lista, creamos un widget de Texto
+                                  return Align(
                                     alignment: Alignment.centerLeft,
-                                    child: Text('Tarea',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700))),
-                                Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text('Premio',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700))),
-                                Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text('Castigo',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700))),
-                              ],
-                              onChanged: (v) => setState(() => _type = v),
+                                    child: Text(
+                                      tipo.descripcion, // Usamos la descripción del tipo actual
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(); // Convertimos el resultado en una lista de Widgets
+                              },
+                              onChanged: (v) =>
+                                  setState(() => _selectedTypeId = v),
+                              validator: (v) =>
+                                  v == null ? 'Selecciona un tipo' : null,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700,
@@ -181,54 +237,27 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                                       color: Colors.black.withOpacity(0)),
                                 ),
                               ),
-                              validator: (v) =>
-                                  v == null ? 'Selecciona el tipo' : null,
                             ),
 
                             const SizedBox(height: 14),
 
                             // Panel de descripción según el tipo
-                            if (_type != null)
+                            if (tipoSeleccionado !=
+                                null) // Usamos el objeto que encontramos
                               Container(
                                 width: double.infinity,
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: AppTheme.blackLight,
                                   borderRadius: BorderRadius.circular(14),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black26,
-                                      blurRadius: 10,
-                                      offset: Offset(0, 6),
-                                    ),
-                                  ],
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 16),
+                                // Mostramos el detalle del objeto TipoActividad
                                 child: Text(
-                                  _typeDescriptions[_type] ??
-                                      'Descripción Tipo de Actividad',
+                                  tipoSeleccionado.detalle ??
+                                      'Descripción no disponible.',
                                   style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              )
-                            else
-                              // Para reservar espacio similar al mock
-                              Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.blackLight,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 16),
-                                child: Text(
-                                  'Descripción Tipo de Actividad\nCastigo : Se restarán puntos etc......',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ),
 
@@ -300,7 +329,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
                             ),
                           ),
                           onPressed: _save,
-                          child: const Text('Guardar Actividad'),
+                          child: Text(buttonText),
                         ),
                       ),
                     ],

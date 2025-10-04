@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:mission_up/views/auth/guest_screen.dart';
-import 'package:mission_up/views/auth/login.dart';
-import 'package:mission_up/views/auth/register.dart';
+import 'package:mission_up/views/auth/student_screen.dart';
+import 'package:mission_up/views/auth/login_screen.dart';
+import 'package:mission_up/views/auth/register_screen.dart';
 import 'package:mission_up/views/intro/intro_o.dart';
 import 'package:mission_up/views/loading.dart';
-import 'package:mission_up/views/main/activity_form.dart';
+import 'package:mission_up/views/main/activities/activity_form.dart';
 import 'package:mission_up/views/main/home.dart';
 import 'package:mission_up/views/main/main_shell.dart';
+import 'package:mission_up/views/main/pending/pending_screen.dart';
 
 Route<dynamic> generateRoute(RouteSettings settings) {
   final args = settings.arguments as Map<String, dynamic>? ?? {};
@@ -22,14 +23,15 @@ Route<dynamic> generateRoute(RouteSettings settings) {
     case '/register':
       return _fadeRoute(const RegisterScreen(), settings);
     case '/loading':
-      return _fadeRoute(const LoadingScreen(), settings);
+      return _fadeRoute(const AuthWrapperScreen(), settings);
+    case '/pending':
+      return _fadeRoute(const PendingApprovalScreen(), settings);
     case '/main':
       {
-        final isAdmin = args?['isAdmin'] as bool? ?? false;
         final tab = args?['tab'] as int? ?? 0;
 
         return MaterialPageRoute(
-          builder: (_) => MainShell(isAdmin: isAdmin, initialIndex: tab),
+          builder: (_) => MainShell(),
           settings: settings,
         );
       }

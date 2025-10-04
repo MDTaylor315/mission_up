@@ -1,12 +1,28 @@
-// lib/views/main/profile.dart
 import 'package:flutter/material.dart';
 import 'package:mission_up/app_theme.dart';
+import 'package:mission_up/controllers/profile_controller.dart'; // ✅ 1. Importa tu controller
+import 'package:mission_up/providers/auth_provider.dart'; // ✅ 2. Importa el AuthService
+import 'package:provider/provider.dart'; // ✅ 3. Importa Provider
 
-class ProfileScreen extends StatelessWidget {
+// ✅ 4. Convertimos a StatefulWidget para poder usar nuestro ProfileController
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  // ✅ 5. Creamos una instancia del ProfileController
+  final _controller = ProfileController();
+
+  @override
   Widget build(BuildContext context) {
+    // ✅ 6. Obtenemos la instancia de AuthService usando context.watch
+    //    Usamos 'watch' para que la UI se reconstruya si los datos del usuario cambian.
+    final authService = context.watch<AuthService>();
+    final user = authService.currentUser;
+
     return Scaffold(
       extendBody: true,
       body: SafeArea(
@@ -39,18 +55,22 @@ class ProfileScreen extends StatelessWidget {
                         color: AppTheme.primaryColor,
                         shape: BoxShape.circle,
                       ),
+                      // TODO: Aquí podrías mostrar el avatar del usuario si lo tienes
+                      // child: CircleAvatar(backgroundImage: NetworkImage(user.avatarUrl ?? '')),
                     ),
                     const SizedBox(height: 14),
-                    const Text(
-                      'Marlon Alva',
-                      style: TextStyle(
+                    // ✅ 7. Mostramos los datos reales del usuario
+                    Text(
+                      user?.nombre ?? 'Usuario', // Muestra el nombre real
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'marlonalvab@hotmail.com',
+                      // Muestra el correo o el username
+                      user?.correo ?? user?.telefono ?? 'Sin contacto',
                       style: TextStyle(
                         color: Colors.white.withOpacity(.9),
                         fontWeight: FontWeight.w500,
@@ -84,8 +104,9 @@ class ProfileScreen extends StatelessWidget {
               _MenuTile(
                 label: 'Cerrar Sesión',
                 icon: Icons.logout_rounded,
+                // ✅ 8. Conectamos el botón para que llame al controller
                 onTap: () {
-                  // TODO: cerrar sesión
+                  _controller.logout(context);
                 },
               ),
             ],

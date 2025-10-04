@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:mission_up/app_theme.dart';
+import 'package:mission_up/controllers/home_controller.dart';
+import 'package:mission_up/providers/alumno_provider.dart';
+import 'package:mission_up/providers/auth_provider.dart';
+import 'package:mission_up/utils/date_formatter.dart';
 import 'package:mission_up/widgets/task_row.dart';
 import 'package:mission_up/widgets/tasks_card.dart';
 import 'package:mission_up/widgets/widgets.dart';
+import 'package:provider/provider.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
-  final bool isAdmin; // 👈 Nuevo parámetro
-
-  const HomeDashboardScreen({super.key, this.isAdmin = false});
+  const HomeDashboardScreen({super.key});
 
   @override
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
@@ -17,36 +21,79 @@ class HomeDashboardScreen extends StatefulWidget {
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   // Colores aproximados del mock
   static const kTextDim = Colors.white70;
-
+  final controller = HomeController();
   // Estado para el calendario
   String selectedMonth = 'Junio';
   int selectedDay = 1;
+  DateTime _fechaSeleccionada = DateTime.now();
 
-  // Función para obtener el número de días en un mes
-  int getDaysInMonth(String month, int year) {
-    const monthDays = {
-      'Enero': 31,
-      'Febrero': 28,
-      'Marzo': 31,
-      'Abril': 30,
-      'Mayo': 31,
-      'Junio': 30,
-      'Julio': 31,
-      'Agosto': 31,
-      'Septiembre': 30,
-      'Octubre': 31,
-      'Noviembre': 30,
-      'Diciembre': 31,
-    };
+  @override
+  initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final timeService = context.read<TimeService>();
 
-    int days = monthDays[month] ?? 31;
+      // ✅ 2. Actualizamos nuestra única variable de estado de fecha.
+      //    Esto es importante si tu TimeService está configurado para pruebas.
+      _fechaSeleccionada = timeService.now();
+      _onDateSelected(_fechaSeleccionada, isInitialLoad: true);
 
-    // Lógica para años bisiestos en febrero
-    if (month == 'Febrero' && isLeapYear(year)) {
-      days = 29;
+      setState(() {
+        selectedMonth = _monthNameFromInt(timeService.now().month);
+        _onDateSelected(_fechaSeleccionada, isInitialLoad: true);
+      });
+    });
+  }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+  }
+
+  void _onDateSelected(DateTime nuevaFecha, {bool isInitialLoad = false}) {
+    if (!isInitialLoad) {
+      setState(() {
+        _fechaSeleccionada = nuevaFecha;
+        print("Fecha seleccionada: $nuevaFecha");
+      });
     }
 
-    return days;
+    final provider = context.read<AlumnoProvider>();
+    final authService = context.read<AuthService>();
+    final fechaFormateada = DateFormat('yyyy-MM-dd').format(nuevaFecha);
+
+    provider.fetchAlumnosActivos(fecha: fechaFormateada);
+  }
+
+  // Función para obtener el número de días en un mes
+  int getDaysInMonth(int month, int year) {
+    int diasMes = 0;
+    if (month != DateTime.now().month) {
+      diasMes = DateTime(year, month + 1, 0).day;
+    } else {
+      diasMes = DateTime.now().day;
+    }
+    return diasMes;
+  }
+
+  String _monthNameFromInt(int month) {
+    const names = [
+      'Enero',
+      'Febrero',
+      'Marzo',
+      'Abril',
+      'Mayo',
+      'Junio',
+      'Julio',
+      'Agosto',
+      'Septiembre',
+      'Octubre',
+      'Noviembre',
+      'Diciembre'
+    ];
+    return names[month - 1];
   }
 
   // Función para verificar si es año bisiesto
@@ -55,47 +102,29 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   }
 
   // Función para obtener el nombre del día de la semana
-  String getDayName(int day, String month) {
+  String getDayName(int day, int month, int year) {
     const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-
-    int currentYear = DateTime.now().year;
-    int monthIndex = [
-          'Enero',
-          'Febrero',
-          'Marzo',
-          'Abril',
-          'Mayo',
-          'Junio',
-          'Julio',
-          'Agosto',
-          'Septiembre',
-          'Octubre',
-          'Noviembre',
-          'Diciembre'
-        ].indexOf(month) +
-        1;
-
-    DateTime date = DateTime(currentYear, monthIndex, day);
+    final date = DateTime(year, month, day);
     return days[date.weekday - 1];
   }
 
   // Generar lista de días para el mes seleccionado
   List<Widget> generateDayPills() {
-    int currentYear = DateTime.now().year;
-    int daysInMonth = getDaysInMonth(selectedMonth, currentYear);
+    final int year = _fechaSeleccionada.year;
+    final int month = _fechaSeleccionada.month;
+    final int daysInMonth = getDaysInMonth(month, year);
 
     return List.generate(daysInMonth, (index) {
       int day = index + 1;
-      String dayName = getDayName(day, selectedMonth);
+      String dayName = getDayName(day, month, year);
 
       return _DatePill(
         day: dayName,
         date: day.toString().padLeft(2, '0'),
-        active: selectedDay == day,
+        active: _fechaSeleccionada.day == day,
         onTap: () {
-          setState(() {
-            selectedDay = day;
-          });
+          final nuevaFecha = DateTime(year, month, day);
+          _onDateSelected(nuevaFecha); // <-- Llama al cerebro
         },
       );
     });
@@ -103,7 +132,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print("isAdmin ${widget.isAdmin}");
+    final authService = context.watch<AuthService>();
+    final alumnoProvider = context.watch<AlumnoProvider>();
+    final isAdmin = authService.currentUser?.isAdmin ?? false;
+    final bool esHoy = _isToday(_fechaSeleccionada);
+
+    print("isAdmin ${isAdmin}");
     return Scaffold(
       extendBody: true,
       body: SafeArea(
@@ -117,7 +151,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Bienvenido, David',
+                      'Bienvenido, ${authService.currentUser?.nombre}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -132,50 +166,99 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (widget.isAdmin)
+              if (isAdmin)
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Código de familia
-                    _FamilyCodeCard(code: '021932'),
+                    _FamilyCodeCard(
+                        code: "${authService.currentUser?.codigoInvitacion}"),
                     const SizedBox(height: 8),
 
                     // Mes (INTEGRADO CON CALENDARIO)
                     _MonthPickerCard(
-                      value: selectedMonth,
-                      onChanged: (String? newMonth) {
-                        if (newMonth != null) {
-                          setState(() {
-                            selectedMonth = newMonth;
-                            // Resetear el día seleccionado si es mayor al máximo del nuevo mes
-                            int maxDays =
-                                getDaysInMonth(newMonth, DateTime.now().year);
-                            if (selectedDay > maxDays) {
-                              selectedDay = 1;
-                            }
-                          });
+                      // El valor del dropdown ahora se deriva de _fechaSeleccionada
+                      value: _monthNameFromInt(_fechaSeleccionada.month),
+                      onChanged: (String? newMonthName) {
+                        if (newMonthName != null) {
+                          final int newMonthIndex = [
+                                'Enero',
+                                'Febrero',
+                                'Marzo',
+                                'Abril',
+                                'Mayo',
+                                'Junio',
+                                'Julio',
+                                'Agosto',
+                                'Septiembre',
+                                'Octubre',
+                                'Noviembre',
+                                'Diciembre'
+                              ].indexOf(newMonthName) +
+                              1;
+                          print("si cambia");
+                          // Creamos una nueva fecha y llamamos a nuestra función central
+                          final nuevaFecha = DateTime(
+                              _fechaSeleccionada.year, newMonthIndex, 1);
+                          _onDateSelected(nuevaFecha);
                         }
                       },
                     ),
                     const SizedBox(height: 14),
 
-                    // Hijos
-                    TaskCard(
-                      name: 'Marlon',
-                      subtitle: '1/3 tareas realizadas',
-                      coins: 1,
-                    ),
+                    if (alumnoProvider.isLoadingActivos)
+                      const Center(child: CircularProgressIndicator())
+                    else if (alumnoProvider.alumnosActivos.isEmpty)
+                      const Text('No hay alumnos activos para mostrar.',
+                          style: TextStyle(color: Colors.white70))
+                    else
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: alumnoProvider.alumnosActivos.length,
+                        itemBuilder: (context, index) {
+                          final alumno = alumnoProvider.alumnosActivos[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10.0),
+                            child: TaskCard(
+                              // Tu widget para alumnos activos
+                              name: alumno.nombre,
+                              subtitle: alumno.resumenTareas,
+                              coins: alumno.puntosHoy,
+                              // onTap: () => ... (lógica para seleccionar al alumno)
+                            ),
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 15),
+                    if (alumnoProvider.solicitudesPendientes.isNotEmpty)
+                      Text(
+                        'Solicitudes pendientes',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 22),
+                      ),
                     const SizedBox(height: 10),
-                    TaskCard(
-                      name: 'Paolo',
-                      subtitle: '0/3 tareas realizadas',
-                      coins: 0,
-                    ),
-                    const SizedBox(height: 10),
-                    TaskCard.request(
-                      name: 'Saul',
-                      subtitle: 'Solicitud de unión',
-                      onAccept: () {},
-                      onReject: () {},
+
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: alumnoProvider.solicitudesPendientes.length,
+                      itemBuilder: (context, index) {
+                        final solicitud =
+                            alumnoProvider.solicitudesPendientes[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10.0),
+                          child: TaskCard.request(
+                              name: solicitud.nombre,
+                              subtitle: 'Solicitud de unión',
+                              onAccept: () =>
+                                  controller.acceptAlumno(context, solicitud),
+                              onReject: () =>
+                                  controller.rejectAlumno(context, solicitud)),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -300,7 +383,7 @@ class _MonthPickerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const months = [
+    List<String> months = [
       'Enero',
       'Febrero',
       'Marzo',
@@ -314,6 +397,9 @@ class _MonthPickerCard extends StatelessWidget {
       'Noviembre',
       'Diciembre'
     ];
+
+    print("dia actual ${DateTime.now().day}");
+    months = months.sublist(0, DateTime.now().month);
 
     return Container(
       width: double.infinity,

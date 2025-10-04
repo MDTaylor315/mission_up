@@ -1,35 +1,37 @@
-// lib/views/auth/register_screen.dart
+// lib/views/auth/login_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mission_up/app_theme.dart';
+import 'package:mission_up/controllers/login_controller.dart';
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-
-  final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
+  final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  final _pass2Ctrl = TextEditingController();
 
-  bool _obscure1 = true;
-  bool _obscure2 = true;
+  final _userFocus = FocusNode();
+  final _passFocus = FocusNode();
 
-  static const _orange = Color(0xFFFFA754); // flecha
-  static const _registerBtn = Color(0xFFF0B657); // botón Registrarme
+  bool _obscure = true;
+
+  LoginController controller = LoginController();
+
+  static const _orange = Color(0xFFFFA754); // flecha y link
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _emailCtrl.dispose();
+    _userCtrl.dispose();
     _passCtrl.dispose();
-    _pass2Ctrl.dispose();
+
+    _userFocus.dispose();
+    _passFocus.dispose();
     super.dispose();
   }
 
@@ -55,13 +57,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      FocusScope.of(context).unfocus();
-      // TODO: lógica real de registro
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Creando cuenta...')),
-      );
+  Future<void> _submit() async {
+    // 1. Valida el formulario
+    if (!_formKey.currentState!.validate()) return;
+
+    // Captura cuál nodo tiene el foco AHORA MISMO.
+    final currentFocus = FocusManager.instance.primaryFocus;
+
+    // Oculta el teclado de forma inmediata.
+    currentFocus?.unfocus();
+
+    // 3. Llama al controller.
+    final success = await controller.login(
+      context,
+      contacto: _userCtrl.text.trim(),
+      password: _passCtrl.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      print('Login exitoso, esperando la navegación automática...');
+    } else {
+      print('El login falló. El usuario ya vio el diálogo de error.');
+      currentFocus?.unfocus();
     }
   }
 
@@ -69,14 +88,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
+      // explícito (por si lo cambiaste en otro lado)
       resizeToAvoidBottomInset: true,
+
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => FocusScope.of(context).unfocus(),
+
+          // ⬇️ Clave: LayoutBuilder + SingleChildScrollView + ConstrainedBox
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+              final bottomInset =
+                  MediaQuery.of(context).viewInsets.bottom; // alto del teclado
 
               return SingleChildScrollView(
                 keyboardDismissBehavior:
@@ -84,13 +108,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 16),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  // IntrinsicHeight permite que los Spacer funcionen con scroll
                   child: IntrinsicHeight(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Back
+                        // Back (sin márgenes extra si no los quieres)
                         Padding(
-                          padding: const EdgeInsets.only(top: 16.0),
+                          padding: const EdgeInsets.symmetric(vertical: 16.0),
                           child: IconButton(
                             style: IconButton.styleFrom(
                               padding: EdgeInsets.zero,
@@ -98,7 +123,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             icon: const Icon(Icons.arrow_back_rounded,
-                                color: _orange),
+                                color: Color(0xFFFFA754)),
                             onPressed: () => Navigator.maybePop(context),
                           ),
                         ),
@@ -106,7 +131,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         // Título
                         Center(
                           child: Text(
-                            'Registrarme',
+                            'Iniciar Sesión',
                             style: Theme.of(context)
                                 .textTheme
                                 .headlineMedium
@@ -118,7 +143,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
 
                         // Logo
                         Center(
@@ -130,7 +155,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
 
                         // Formulario
                         Form(
@@ -138,22 +163,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           child: Column(
                             children: [
                               TextFormField(
-                                controller: _nameCtrl,
-                                textInputAction: TextInputAction.next,
-                                keyboardType: TextInputType.name,
-                                textCapitalization: TextCapitalization.words,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600),
-                                decoration: _decor('Nombres y Apellidos'),
-                                validator: (v) =>
-                                    (v == null || v.trim().isEmpty)
-                                        ? 'Ingresa tu nombre'
-                                        : null,
-                              ),
-                              const SizedBox(height: 14),
-                              TextFormField(
-                                controller: _emailCtrl,
+                                controller: _userCtrl,
+                                focusNode: _userFocus,
                                 textInputAction: TextInputAction.next,
                                 keyboardType: TextInputType.emailAddress,
                                 style: const TextStyle(
@@ -168,8 +179,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               const SizedBox(height: 14),
                               TextFormField(
                                 controller: _passCtrl,
-                                textInputAction: TextInputAction.next,
-                                obscureText: _obscure1,
+                                focusNode: _passFocus,
+                                textInputAction: TextInputAction.done,
+                                obscureText: _obscure,
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600),
@@ -177,73 +189,83 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   'Contraseña',
                                   suffix: IconButton(
                                     onPressed: () =>
-                                        setState(() => _obscure1 = !_obscure1),
+                                        setState(() => _obscure = !_obscure),
                                     icon: Icon(
-                                      _obscure1
+                                      _obscure
                                           ? Icons.visibility
                                           : Icons.visibility_off,
                                       color: Colors.white.withOpacity(.9),
                                     ),
                                   ),
                                 ),
-                                validator: (v) => (v == null || v.length < 6)
-                                    ? 'Mínimo 6 caracteres'
-                                    : null,
-                              ),
-                              const SizedBox(height: 14),
-                              TextFormField(
-                                controller: _pass2Ctrl,
-                                textInputAction: TextInputAction.done,
-                                obscureText: _obscure2,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600),
-                                decoration: _decor(
-                                  'Repetir Contraseña',
-                                  suffix: IconButton(
-                                    onPressed: () =>
-                                        setState(() => _obscure2 = !_obscure2),
-                                    icon: Icon(
-                                      _obscure2
-                                          ? Icons.visibility
-                                          : Icons.visibility_off,
-                                      color: Colors.white.withOpacity(.9),
-                                    ),
-                                  ),
-                                ),
-                                validator: (v) => (v != _passCtrl.text)
-                                    ? 'Las contraseñas no coinciden'
-                                    : null,
                                 onFieldSubmitted: (_) => _submit(),
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Ingresa tu contraseña'
+                                    : null,
                               ),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        // Olvidé contraseña
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: TextButton(
+                            onPressed: () {},
+                            style: TextButton.styleFrom(
+                              foregroundColor: _orange,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            child: const Text('Olvide Contraseña',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ),
 
-                        // Botón Registrarme (naranja)
+                        SizedBox(height: 10),
+                        // Botón principal
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
                             style: FilledButton.styleFrom(
-                              backgroundColor: _registerBtn,
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor:
+                                  const Color.fromARGB(255, 199, 223, 206),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                            ),
+                            onPressed: () async {
+                              await _submit();
+                            },
+                            child: const Text('Iniciar Sesión',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Botón registrarme (naranja claro)
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFF0B657),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                                  borderRadius: BorderRadius.circular(14)),
                             ),
-                            onPressed: _submit,
-                            child: const Text(
-                              'Registrarme',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
+                            onPressed: () {
+                              Navigator.of(context).pushNamed(
+                                "/register",
+                              );
+                            },
+                            child: const Text('Registrarme',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ),
 
-                        const SizedBox(height: 24),
-
+                        SizedBox(height: 30),
                         // Separador "o"
                         Row(
                           children: [
@@ -254,13 +276,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text(
-                                'o',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(.85),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              child: Text('o',
+                                  style: TextStyle(
+                                      color: Colors.white.withOpacity(.85),
+                                      fontWeight: FontWeight.w700)),
                             ),
                             Expanded(
                                 child: Divider(
@@ -269,7 +288,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ],
                         ),
 
-                        const SizedBox(height: 24),
+                        SizedBox(height: 30),
 
                         // Social buttons
                         Row(

@@ -2,54 +2,52 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:mission_up/app_theme.dart';
-import 'package:mission_up/views/main/activities.dart';
-import 'package:mission_up/views/main/activities_picker.dart';
-import 'package:mission_up/views/main/activity_form.dart';
+import 'package:mission_up/models/actividad.dart';
+import 'package:mission_up/providers/actividad_provider.dart';
+import 'package:mission_up/providers/alumno_provider.dart';
+import 'package:mission_up/providers/auth_provider.dart';
+import 'package:mission_up/views/main/activities/activities.dart';
+import 'package:mission_up/views/main/activities/activities_picker_screen.dart';
+import 'package:mission_up/views/main/activities/activity_form.dart';
 import 'package:mission_up/views/main/assignments_screen.dart';
 import 'package:mission_up/views/main/home.dart';
 import 'package:mission_up/views/main/profile.dart';
 import 'package:mission_up/views/main/students_picker.dart';
+import 'package:provider/provider.dart';
+
 // 👇 NUEVO: importa tu pantalla de asignaciones
-
-class MainShell extends StatefulWidget {
-  final bool isAdmin;
-  final int initialIndex;
-
-  const MainShell({
-    super.key,
-    this.isAdmin = false,
-    this.initialIndex = 0,
-  });
+class MainShell extends StatelessWidget {
+  const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  Widget build(BuildContext context) {
+    // Ya no necesitamos leer el authService aquí, el ProxyProvider lo hará por nosotros.
+
+    return const _MainShellView();
+  }
 }
 
-class _MainShellState extends State<MainShell> {
+// --- Widget Interno que Maneja la Vista y la Navegación ---
+class _MainShellView extends StatefulWidget {
+  // ✅ 'initialIndex' eliminado. Ya no es necesario.
+  const _MainShellView();
+
+  @override
+  State<_MainShellView> createState() => _MainShellViewState();
+}
+
+class _MainShellViewState extends State<_MainShellView> {
   late int _index;
-  late List<GlobalKey<NavigatorState>> _keys; // 👈 ahora dinámico
+  late List<GlobalKey<NavigatorState>> _keys;
 
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex;
-    _keys = List.generate(_tabsCount, (_) => GlobalKey<NavigatorState>()); // 👈
+    _index = 0; // ✅ Siempre empezamos en la primera pestaña (índice 0).
+    _keys = [];
   }
 
-  @override
-  void didUpdateWidget(covariant MainShell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Si cambia isAdmin (o potencialmente el número de tabs), re-crea llaves y ajusta índice
-    if (oldWidget.isAdmin != widget.isAdmin) {
-      final newLen = _tabsCount;
-      _keys = List.generate(newLen, (_) => GlobalKey<NavigatorState>());
-      if (_index >= newLen) _index = 0;
-      setState(() {}); // fuerza rebuild con nueva cantidad de tabs
-    }
-  }
-
-  int get _tabsCount => widget.isAdmin ? 4 : 3; // 👈 con Asignar para admin
-
+  // ... (los métodos _noAnimRoute, _onWillPop, _onTap se mantienen igual) ...
   Route _noAnimRoute(Widget page, RouteSettings s) {
     return PageRouteBuilder(
       settings: s,
@@ -57,29 +55,6 @@ class _MainShellState extends State<MainShell> {
       reverseTransitionDuration: Duration.zero,
       pageBuilder: (_, __, ___) => page,
       transitionsBuilder: (_, __, ___, child) => child,
-    );
-  }
-
-  Widget _tabNavigator({
-    required int index,
-    required Map<String, WidgetBuilder> routes,
-  }) {
-    return Offstage(
-      offstage: _index != index,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _GradientBg(),
-          Navigator(
-            key: _keys[index],
-            initialRoute: '/',
-            onGenerateRoute: (settings) {
-              final builder = routes[settings.name] ?? routes['/']!;
-              return _noAnimRoute(builder(context), settings);
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -98,49 +73,104 @@ class _MainShellState extends State<MainShell> {
     } else {
       setState(() => _index = i);
     }
-  }
+  } // ...
 
   @override
   Widget build(BuildContext context) {
-    // 👇 Definimos las rutas por pestaña de forma dinámica
+    final authService = context.watch<AuthService>();
+    final isAdmin = authService.currentUser?.isAdmin ?? false;
+    final tabsCount = isAdmin ? 4 : 3;
+
+    if (_keys.length != tabsCount) {
+      _keys = List.generate(tabsCount, (_) => GlobalKey<NavigatorState>());
+      if (_index >= tabsCount) {
+        _index = 0;
+      }
+    }
+
+    // ✅ Rutas simplificadas. Ya no se usan los ...ProviderScreen
     final tabsRoutes = <Map<String, WidgetBuilder>>[
       {
-        '/': (_) => HomeDashboardScreen(isAdmin: widget.isAdmin),
+        '/': (_) => const HomeDashboardScreen(),
+        // La navegación para asignar ahora vive dentro de la pestaña Home
+        'students/select': (_) => const StudentsSelectScreen(),
       },
       {
-        '/': (_) => ActivitiesScreen(isAdmin: widget.isAdmin),
-        'activity/create': (_) => const ActivityFormScreen(),
-        'activity/edit': (_) => const ActivityFormScreen(isEdit: true),
+        '/': (_) => const ActivitiesScreen(),
       },
-      if (widget.isAdmin)
+      if (isAdmin)
         {
-          '/': (_) => const AssignmentsScreen(), // 👈 Nueva pestaña "Asignar"
-          // Si necesitas rutas internas de asignaciones, añádelas aquí
-          'students/select': (_) => const StudentsSelectScreen(),
-          'activities/picker': (_) => const ActivitiesPickerScreen(),
+          // Esta pestaña puede ser la de "Asignaciones" o un resumen
+          '/': (_) => const StudentsSelectScreen(),
+          '/activities': (_) => const ActivitiesPickerScreen()
         },
       {
-        '/': (_) => ProfileScreen(),
+        '/': (_) => const ProfileScreen(),
       },
     ];
 
-    // Seguridad por si el índice queda fuera de rango
     if (_index >= tabsRoutes.length) _index = 0;
+
+    // ✅ onGenerateRoute ahora es más simple
+    Widget _tabNavigator({
+      required int index,
+      required Map<String, WidgetBuilder> routes,
+    }) {
+      return Offstage(
+        offstage: _index != index,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const _GradientBg(),
+            Navigator(
+              key: _keys[index],
+              initialRoute: '/',
+              onGenerateRoute: (settings) {
+                // Para editar, solo pasamos la actividad.
+                if (settings.name == 'activity/edit') {
+                  print("settings.arguments es ${settings.arguments}");
+                  final actividad = (settings.arguments as Map)["actividad"];
+
+                  return _noAnimRoute(
+                    ActivityFormScreen(
+                        isEdit: true, actividad: actividad as Actividad),
+                    settings,
+                  );
+                }
+                // Para crear, no pasamos argumentos.
+                if (settings.name == 'activity/create') {
+                  return _noAnimRoute(
+                    const ActivityFormScreen(isEdit: false),
+                    settings,
+                  );
+                }
+
+                final builder = routes[settings.name] ?? routes['/']!;
+                return _noAnimRoute(builder(context), settings);
+              },
+            ),
+          ],
+        ),
+      );
+    }
 
     return WillPopScope(
       onWillPop: _onWillPop,
-      child: Scaffold(
-        extendBody: true,
-        body: Stack(
-          children: List.generate(
-            tabsRoutes.length,
-            (i) => _tabNavigator(index: i, routes: tabsRoutes[i]),
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Scaffold(
+          extendBody: true,
+          body: Stack(
+            children: List.generate(
+              tabsRoutes.length,
+              (i) => _tabNavigator(index: i, routes: tabsRoutes[i]),
+            ),
           ),
-        ),
-        bottomNavigationBar: BottomNavBar(
-          currentIndex: _index,
-          isAdmin: widget.isAdmin,
-          onTap: _onTap,
+          bottomNavigationBar: BottomNavBar(
+            currentIndex: _index,
+            isAdmin: isAdmin,
+            onTap: _onTap,
+          ),
         ),
       ),
     );
